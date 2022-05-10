@@ -103,6 +103,9 @@ class Bourse {
             this.orders.splice(pushingIndex, 0, newOrder);
             this.currOrderId += 1;
             // there is a problem with short because you actully get money but it doesnt enter into your
+            this.orders.splice(pushingIndex, 0, newOrder);
+            this.currOrderId += 1;
+            // there is a problem with short because you acctully get money but it doesnt enter into your
             // account untill you buy back the position, but in this way you can sell as much as you want.
             if (position === 'buy') {
                 this.balance -= amount;
@@ -181,6 +184,7 @@ class Bourse {
                 currPosition.closedPrice = currPosition.takeProfit;
                 let multiplyFactor = currPosition.position === 'buy' ? 1 : -1
                 currPosition.value = multiplyFactor * ((currPosition.share * currPosition.closedPrice) - (currPosition.share * currPosition.openPrice));
+                currPosition.value = (currPosition.share * currPosition.closedPrice) - (currPosition.share * currPosition.openPrice);
                 this.balance += currPosition.value;
                 toClosePositionsArr.push(currPosition);
             } else if (this.isInPriceRange(currPosition.stopLoss)) {
@@ -225,7 +229,7 @@ class Bourse {
     }
 }
 
- // [timestamp, open, high, low, close, volume]
+// [timestamp, open, high, low, close, volume]
 const fakeHistory = [[1,2,12,9],[2,2,10,8],[3,2,9,6],[4,2,14,10]]
 
 
@@ -281,6 +285,7 @@ async function testPositionsArraySorted() {
     console.log(firstBourse.positions[0].openPrice === 9);
     console.log(firstBourse.positions[1].openPrice === 10);
     console.log(firstBourse.positions[2].openPrice === 11);
+    console.log(firstBourse.positions);
 }
 
 async function testNotOpenPositionMoreThenBalance() {
@@ -368,7 +373,6 @@ async function testStopLossForBuy() {
     console.log(firstBourse.closedPositions[0].value === -8);
 
 }
-
 
 async function testTakeProfitForSell() {
     let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
