@@ -117,23 +117,12 @@ class Bourse {
         return this.positions.length;
     }
 
-    // if entered into short position and the price went up, and you dont have enough money to rebuy
-    // the position what do we do?
     putOrder(atPrice, amount, position, takeProfit, stopLoss) {
-        if (position === 'buy' && amount > this.balance && (atPrice !== takeProfit && atPrice !== stopLoss)) {
-            return {};
-        } else {
-            let pushingIndex = this.findIndexToEnterOrder(atPrice);
-            let newOrder = createOrder(atPrice, amount, position, takeProfit, stopLoss, this.currOrderId);
-            this.orders.splice(pushingIndex, 0, newOrder);
-            this.currOrderId += 1;
-            // there is a problem with short because you acctully get money but it doesnt enter into your
-            // account untill you buy back the position, but in this way you can sell as much as you want.
-            if (position === 'buy') {
-                this.balance -= amount;
-            }
-            return newOrder;
-        }
+        let pushingIndex = this.findIndexToEnterOrder(atPrice);
+        let newOrder = createOrder(atPrice, amount, position, takeProfit, stopLoss, this.currOrderId);
+        this.orders.splice(pushingIndex, 0, newOrder);
+        this.currOrderId += 1;
+        return newOrder;
     }
 
     closeAllOrders() {
@@ -143,9 +132,6 @@ class Bourse {
     closeOrder(orderid) {
         for (let i = 0; i < this.orders.length; i++) {
             if (orderid === this.orders[i].id) {
-                if (this.orders[i].position === 'buy') {
-                    this.balance += this.orders[i].amount;
-                }
                 this.orders.splice(i, 1);
                 break;
             }
@@ -183,8 +169,9 @@ class Bourse {
     checkEnteredIntoPosition() {
         let ordersToClose = [];
         for (let openOrder of this.orders) {
-            if (this.isInPriceRange(openOrder.atPrice)) {
+            if (this.isInPriceRange(openOrder.atPrice) && this.balance > openOrder.amount) {
                 this.openPosition(openOrder);
+                this.balance -= openOrder.amount;
                 ordersToClose.push(openOrder);
             }
         }
@@ -208,7 +195,7 @@ class Bourse {
             } else if (this.isInPriceRange(takeProfit) || this.isInPriceRange(stopLoss)) {
                 currPosition.closedPrice = this.isInPriceRange(takeProfit) ? takeProfit : stopLoss;
                 currPosition.value = multiplyFactor * ((share * currPosition.closedPrice) - amount);
-                this.balance += position === 'buy' ? amount + currPosition.value : currPosition.value;
+                this.balance += amount + currPosition.value;
                 toClosePositionsArr.push(currPosition);
             }
         }
@@ -232,7 +219,7 @@ class Bourse {
                     currPosition.value = amount - (this.currentPrice.low * share);
                     currPosition.closedPrice = this.currentPrice.low;
                 }
-                this.balance += currPosition.value;
+                this.balance += currPosition.value + amount;
                 this.closePositions([currPosition]);
                 return true;
             }
@@ -481,6 +468,25 @@ async function testCloseShortWhenEnterToMinusWithStopLoss() {
     console.log(firstBourse.closedPositions[0].value === 700 - (700 / 9 * 12));
 }
 
+async function testBalance() {
+    console.log('TEST BALANCE');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(9, 90, 'buy', 14, 1);
+    let myorder2 = firstBourse.putOrder(8, 80, 'sell', 6, 20);
+    console.log(firstBourse.balance === 1000);
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.balance === 910);
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.balance === 830);
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.balance === 930);
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.balance === 1070);
+    console.log(firstBourse.orders.length === 0);
+    console.log(firstBourse.positions.length === 0);
+    console.log(firstBourse.closedPositions.length === 2);
+}
+
 async function realFuckingTest() {
     let firstBourse = new Bourse(10000, '1m', 1652004126, 600, 'ETH/USDT');
     await firstBourse.init();
@@ -509,8 +515,8 @@ async function realFuckingTest() {
 // testPutOrder();
 // testOpenPosition();
 // testNotOpenPositionMoreThenBalance();
-testCloseOrder();
-testCloseAllOrders();
+// testCloseOrder();
+// testCloseAllOrders();
 // testOrdersArraySorted();
 // testPositionsArraySorted();
 // testCloseBuyPosition();
@@ -522,4 +528,5 @@ testCloseAllOrders();
 // testStopLossForSell();
 // testCloseShortWhenEnterToMinusWithoutStopLoss();
 // testCloseShortWhenEnterToMinusWithStopLoss();
+// testBalance();
 // realFuckingTest();
