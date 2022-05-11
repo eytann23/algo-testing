@@ -34,6 +34,33 @@ class order {
     }
 }
 
+function createOrder(atPrice, amount, position, takeProfit, stopLoss, id) {
+    return {
+        'atPrice': atPrice,
+        'amount': amount,
+        'position': position,
+        'takeProfit': takeProfit,
+        'stopLoss': stopLoss,
+        'id': id,
+        'date': new Date().toLocaleString()
+    }
+}
+
+
+function createPosition(openPrice, amount, position, takeProfit, stopLoss, id) {
+    return {
+        'openPrice': openPrice,
+        'amount': amount,
+        'share': amount / openPrice,
+        'position': position,
+        'takeProfit': takeProfit,
+        'stopLoss': stopLoss,
+        'id': id,
+        'date': new Date().toLocaleString()
+    }
+}
+
+
 // the algo should decied how much money to put on every position considering the grade of all the
 // data in a given moment.
 // the algo has to have log of why it entered each position.
@@ -98,11 +125,7 @@ class Bourse {
             return {};
         } else {
             let pushingIndex = this.findIndexToEnterOrder(atPrice);
-            let newOrder = new order(atPrice, amount, position, takeProfit, stopLoss, this.currOrderId);
-            console.log('open new order');
-            this.orders.splice(pushingIndex, 0, newOrder);
-            this.currOrderId += 1;
-            // there is a problem with short because you actully get money but it doesnt enter into your
+            let newOrder = createOrder(atPrice, amount, position, takeProfit, stopLoss, this.currOrderId);
             this.orders.splice(pushingIndex, 0, newOrder);
             this.currOrderId += 1;
             // there is a problem with short because you acctully get money but it doesnt enter into your
@@ -135,7 +158,7 @@ class Bourse {
     }
 
     getPositionById(positionId) {
-        return this.positions.filter(position => position.id === positionId);
+        return this.positions.filter(position => position.id === positionId)[0];
     }
 
     removePositionById(positionId) {
@@ -144,13 +167,8 @@ class Bourse {
 
     closePosition(positionId, atPrice) {
         let toClosePosition = this.getPositionById(positionId);
-        this.positions = this.removePositionById(positionId);
-        if (toClosePosition.position === 'buy') {
-            toClosePosition.position = 'sell';
-        } else {
-            toClosePosition.position = 'buy';
-        }
-        this.putOrder(atPrice, toClosePosition.amount, toClosePosition.position, atPrice, atPrice);
+        toClosePosition.stopLoss = atPrice;
+        toClosePosition.takeProfit = atPrice;
     }
 
     isInPriceRange(price) {
@@ -173,7 +191,7 @@ class Bourse {
 
     closeOrderWhichBecamePosition(ordersToCloseArr) {
         for (order of ordersToCloseArr) {
-            this.orders = this.orders.filter(order => !this.containObjectWithTheSameId(ordersToCloseArr,order))
+            this.orders = this.orders.filter(order => !this.containObjectWithTheSameId(ordersToCloseArr, order))
         }
     }
 
@@ -184,7 +202,6 @@ class Bourse {
                 currPosition.closedPrice = currPosition.takeProfit;
                 let multiplyFactor = currPosition.position === 'buy' ? 1 : -1
                 currPosition.value = multiplyFactor * ((currPosition.share * currPosition.closedPrice) - (currPosition.share * currPosition.openPrice));
-                currPosition.value = (currPosition.share * currPosition.closedPrice) - (currPosition.share * currPosition.openPrice);
                 this.balance += currPosition.value;
                 toClosePositionsArr.push(currPosition);
             } else if (this.isInPriceRange(currPosition.stopLoss)) {
@@ -196,22 +213,22 @@ class Bourse {
             }
             // fix the short enter to minus positions
             if (currPosition.position === 'sell') {
-                this.checkIfNeedToCloseShortPosition(currPosition);                
+                this.checkIfNeedToCloseShortPosition(currPosition);
             }
         }
         this.closePositions(toClosePositionsArr)
     }
 
     checkIfNeedToCloseShortPosition(shortPosition) {
-       let positionValue = (shortPosition.share * this.currentPrice.high) - (shortPosition.share * shortPosition.openPrice);
-       if( this.balance - positionValue <= 0 ) {
-           console.log('in close short under 0');
-           zeroPrice = (balance + shortPosition.openPrice * shortPosition.share) / shortPosition.share
-           if (zeroPrice < this.currentPrice.low) {
-               shortPosition.value = (this.currentPrice.low * shortPosition.share) 
-           }
-           this.closePositions([shortPosition]);
-       }
+        let positionValue = (shortPosition.share * this.currentPrice.high) - (shortPosition.share * shortPosition.openPrice);
+        if (this.balance - positionValue <= 0) {
+            console.log('in close short under 0');
+            zeroPrice = (balance + shortPosition.openPrice * shortPosition.share) / shortPosition.share
+            if (zeroPrice < this.currentPrice.low) {
+                shortPosition.value = (this.currentPrice.low * shortPosition.share)
+            }
+            this.closePositions([shortPosition]);
+        }
     }
 
     containObjectWithTheSameId(objectArr, object) {
@@ -230,35 +247,41 @@ class Bourse {
 }
 
 // [timestamp, open, high, low, close, volume]
-const fakeHistory = [[1,2,12,9],[2,2,10,8],[3,2,9,6],[4,2,14,10]]
-
-
-async function testBourseCreation() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-      await firstBourse.init();
-      console.log(firstBourse.historyPrice.length === 600);
+const fakeHistory = [[1, 2, 12, 9], [2, 2, 10, 8], [3, 2, 9, 6], [4, 2, 14, 10]]
+function initBurseForTest() {
+    const firstBourse = new Bourse(1000, '1m', 1652004126, 600, 'ETH/USDT');
+    firstBourse.init(fakeHistory);
+    return firstBourse;
 }
 
+
+
+// async function testBourseCreation() {
+//     console.log('TEST BOURSE CREATION');
+//     let firstBourse = initBurseForTest();
+//     console.log(firstBourse.historyPrice.length === 600);
+// }
+
 async function testBourseWithTestHistory() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
+    console.log('TEST BOURSE WITH TEST HISTORY');
+    let firstBourse = initBurseForTest();
     console.log(firstBourse.historyPrice.length === 4);
 }
 
 async function testPutOrder() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    firstBourse.putOrder(5,3,'buy',6,4);
-    firstBourse.putOrder(6,3,'buy',7,4);
+    console.log('TEST PUT ORDER');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(5, 3, 'buy', 6, 4);
+    firstBourse.putOrder(6, 3, 'buy', 7, 4);
     console.log(firstBourse.orders.length === 2);
 }
 
 async function testOrdersArraySorted() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    firstBourse.putOrder(10,3,'buy',6,4);
-    firstBourse.putOrder(15,3,'buy',7,4);
-    firstBourse.putOrder(12,3,'buy',7,4);
+    console.log('TEST ORDERS ARRAY SORTED');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(10, 3, 'buy', 6, 4);
+    firstBourse.putOrder(15, 3, 'buy', 7, 4);
+    firstBourse.putOrder(12, 3, 'buy', 7, 4);
     console.log(firstBourse.orders.length === 3);
     console.log(firstBourse.orders[0].atPrice === 10);
     console.log(firstBourse.orders[1].atPrice === 12);
@@ -266,39 +289,38 @@ async function testOrdersArraySorted() {
 }
 
 async function testOpenPosition() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    firstBourse.putOrder(10,3,'buy',17,4);
-    firstBourse.putOrder(2,3,'buy',7,1);
+    console.log('TEST OPEN POSITION');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(10, 3, 'buy', 17, 4);
+    firstBourse.putOrder(2, 3, 'buy', 7, 1);
     firstBourse.getCurrentPrice();
     console.log(firstBourse.positions.length === 1);
 }
 
 async function testPositionsArraySorted() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    firstBourse.putOrder(11,3,'buy',17,4);
-    firstBourse.putOrder(9,3,'buy',15,1);
-    firstBourse.putOrder(10,3,'buy',15,1);
+    console.log('TEST POSITION ARRAY SORTED');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(11, 3, 'buy', 17, 4);
+    firstBourse.putOrder(9, 3, 'buy', 15, 1);
+    firstBourse.putOrder(10, 3, 'buy', 15, 1);
     firstBourse.getCurrentPrice();
     console.log(firstBourse.positions.length === 3);
     console.log(firstBourse.positions[0].openPrice === 9);
     console.log(firstBourse.positions[1].openPrice === 10);
     console.log(firstBourse.positions[2].openPrice === 11);
-    console.log(firstBourse.positions);
 }
 
 async function testNotOpenPositionMoreThenBalance() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    firstBourse.putOrder(10,1200,'buy',17,4);
+    console.log('TEST NOT OPEN POSITION MORE THEN BALANCE');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(10, 1200, 'buy', 17, 4);
     console.log(firstBourse.positions.length === 0);
 }
 
 async function testCloseOrder() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(30,20,'buy',45,4);
+    console.log('TEST CLOSE ORDER');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(30, 20, 'buy', 45, 4);
     firstBourse.getCurrentPrice();
     console.log(firstBourse.orders.length === 1);
     firstBourse.closeOrder(myorder.id)
@@ -306,11 +328,11 @@ async function testCloseOrder() {
 }
 
 async function testCloseAllOrders() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(30,20,'buy',45,4);
-    let myorder2 = firstBourse.putOrder(40,20,'buy',45,4);
-    let myorder3 = firstBourse.putOrder(50,20,'buy',55,4);
+    console.log('TEST CLOSE ALL ORDERS');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(30, 20, 'buy', 45, 4);
+    let myorder2 = firstBourse.putOrder(40, 20, 'buy', 45, 4);
+    let myorder3 = firstBourse.putOrder(50, 20, 'buy', 55, 4);
     firstBourse.getCurrentPrice();
     console.log(firstBourse.orders.length === 3);
     firstBourse.closeAllOrders();
@@ -318,28 +340,44 @@ async function testCloseAllOrders() {
 }
 
 
-async function testCloseBuyPosition() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    firstBourse.putOrder(11,3,'buy',17,4);
-    let myOrder = firstBourse.putOrder(9,3,'buy',15,1);
-    firstBourse.putOrder(10,3,'buy',15,1);
+function testCloseBuyPosition() {
+    console.log('TEST CLOSE BUY POSITION');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(11, 3, 'buy', 17, 4);
+    let myOrder = firstBourse.putOrder(9, 18, 'buy', 15, 1);
+    firstBourse.putOrder(10, 3, 'buy', 15, 1);
     firstBourse.getCurrentPrice();
-    console.log('positions length' , firstBourse.positions.length === 3);
+    console.log('positions length', firstBourse.positions.length === 3);
     console.log('orders length', firstBourse.orders.length === 0);
     firstBourse.closePosition(myOrder.id, 8);
-    console.log(firstBourse.orders.length === 1);
     firstBourse.getCurrentPrice();
     console.log(firstBourse.positions.length === 2);
     console.log(firstBourse.closedPositions.length === 1);
-    console.log(firstBourse.closedPositions);
+    console.log(firstBourse.closedPositions[0].value === -2);
+
+}
+
+function testCloseSellPosition() {
+    console.log('TEST CLOSE SELL POSITION');
+    let firstBourse = initBurseForTest();
+    firstBourse.putOrder(11, 3, 'sell', 17, 4);
+    let myOrder = firstBourse.putOrder(9, 18, 'sell', 19, 6);
+    firstBourse.putOrder(10, 3, 'buy', 15, 1);
+    firstBourse.getCurrentPrice();
+    console.log('positions length', firstBourse.positions.length === 3);
+    console.log('orders length', firstBourse.orders.length === 0);
+    firstBourse.closePosition(myOrder.id, 8);
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.positions.length === 2);
+    console.log(firstBourse.closedPositions.length === 1);
+    console.log(firstBourse.closedPositions[0].value === 2);
 }
 
 async function testCoinShare() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(10,20,'buy',14,4);
-    let myorder2 = firstBourse.putOrder(10,15,'buy',14,4);
+    console.log('TEST COIN SHARE');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(10, 20, 'buy', 14, 4);
+    let myorder2 = firstBourse.putOrder(10, 15, 'buy', 14, 4);
     firstBourse.getCurrentPrice();
     console.log(firstBourse.positions[0].share === 2);
     console.log(firstBourse.positions[1].share === 1.5);
@@ -348,9 +386,9 @@ async function testCoinShare() {
 
 
 async function testTakeProfitForBuy() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(10,20,'buy',14,4);
+    console.log('TEST TAKE PROFIT FOR BUY');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(10, 20, 'buy', 14, 4);
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
@@ -361,9 +399,9 @@ async function testTakeProfitForBuy() {
 }
 
 async function testStopLossForBuy() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(10,20,'buy',20,6);
+    console.log('TEST STOP LOSS FOR BUY');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(10, 20, 'buy', 20, 6);
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
@@ -375,9 +413,9 @@ async function testStopLossForBuy() {
 }
 
 async function testTakeProfitForSell() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(10,20,'sell',6,20);
+    console.log('TEST TAKE PROFIT FOR SELL');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(10, 20, 'sell', 6, 20);
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
@@ -388,9 +426,9 @@ async function testTakeProfitForSell() {
 }
 
 async function testStopLossForSell() {
-    let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
-    await firstBourse.init(fakeHistory);
-    let myorder = firstBourse.putOrder(10,20,'sell',4,14);
+    console.log('TEST STOP LOSS FOR SELL');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(10, 20, 'sell', 4, 14);
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
@@ -402,7 +440,7 @@ async function testStopLossForSell() {
 
 
 
-testBourseCreation();
+// testBourseCreation();
 testBourseWithTestHistory();
 testPutOrder();
 testOpenPosition();
@@ -412,8 +450,11 @@ testCloseAllOrders();
 testOrdersArraySorted();
 testPositionsArraySorted();
 testCloseBuyPosition();
+testCloseSellPosition();
 testCoinShare();
 testTakeProfitForBuy();
 testStopLossForBuy();
 testStopLossForSell();
 testTakeProfitForSell();
+testStopLossForSell();
+

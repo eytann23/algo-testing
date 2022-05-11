@@ -11,8 +11,9 @@ const ccxt = require('ccxt');
 // the algo should decied how much money to put on every position considering the grade of all the
 // data in a given moment.
 // the algo has to have log of why it entered each position.
-class Burse {
+class Bourse {
     constructor(balance, timeFrame,fromDate, limit, symbol) {
+        this.currOrderId = 0;
         this.positions = [];
         this.orders = [];
         this.balance = balance;
@@ -65,19 +66,34 @@ class Burse {
 
     putOrder(atPrice, amount, position, takeProfit, stopLoss) {
         if (position === 'buy' && amount > this.balance) {
-            return false;
+            return {};
         } else {
             let pushingIndex = this.findIndexToEnterOrder(atPrice);
-            this.orders.splice(pushingIndex, 0, new order(atPrice, amount, position, takeProfit, stopLoss));
+            let newOrder = new order(atPrice, amount, position, takeProfit, stopLoss, this.currOrderId);
+            this.orders.splice(pushingIndex, 0,newOrder);
+            this.currOrderId +=1;
             this.balance -= amount;
-            return true;
+            return newOrder;
+        }
+    }
+
+    closeAllOrders() {
+        this.orders = [];
+    }
+
+    closeOrder(orderid) {
+        for (let i=0; i<this.orders.length; i++) {
+            if (orderid === this.orders[i].orderid) {
+                this.orders.splice(i,1);
+                break;
+            }
         }
     }
 
     openPosition(openOrder) {
         let pushingIndex = this.findIndexToEnterPosition(openOrder.atPrice);
         this.positions.splice(pushingIndex, 0, new position(openOrder.atPrice, openOrder.amount,
-            openOrder.position, openOrder.takeProfit, openOrder.stopLoss))
+            openOrder.position, openOrder.takeProfit, openOrder.stopLoss, openOrder.id))
     }
 
     isInPriceRange(price) {
@@ -97,33 +113,44 @@ class Burse {
     }
 
     checkIfNeedToClosePosition() {
-        console.log('checking need to close position ', this.positions);
-        for (let i = 0; i < this.positions.length; i++) {
-            let currPosition = this.positions.slice(i, i+1);
+        console.log('checking need to close position ', this.positions); 
+        let toClosePositionsArr = [];
+        for (let currPosition of this.positions) {
             if (this.isInPriceRange(currPosition.takeProfit)) {
-                this.closePosition(currPosition);
+                currPosition.closedPrice = currPosition.takeProfit;
+                currPosition.value = (position.share * position.closedPrice) - (position.share * position.openPrice);
+                this.balance += currPosition.value;
+                toClosePositionsArr.push(currPosition);
             } else if (this.isInPriceRange(currPosition.stopLoss)) {
-                this.closePosition(currPosition);
-            } else {
-                this.positions.splice(i, 0, currPosition)
+                currPosition.closedPrice = currPosition.stopLoss;
+                currPosition.value = (position.share * position.closedPrice) - (position.share * position.openPrice);
+                this.balance += currPosition.value;
+                toClosePositionsArr.push(currPosition);
+            } 
+            }
+            this.closePositions(toClosePositionsArr)
+        }
+
+    containPositionWithTheSameId(positionsArr, position) {
+        for (let currPosition of positionsArr) {
+            if (currPosition.id === position.id) {
+                return true;
             }
         }
+        return false;
     }
 
-    closePosition(position, isTakeProfit) {
-        if (isTakeProfit) {
-            position.closedPrice = position.takeProfit;
-        } else {
-            position.closedPrice = position.stopLoss;
-        }
-        position.value = (position.share * position.closedPrice) - (position.share * position.openPrice);
+    closePositions(positionsArr) {
+        this.closedPositions.concat(positionsArr);
+        this.positions = this.positions.filter(position => !this.containPositionWithTheSameId(positionsArr,position))
         this.balance += position.value;
         this.closedPositions.push(position);
     }
 }
 
 class position {
-    constructor(openPrice, amount, position, takeProfit, stopLoss) {
+    constructor(openPrice, amount, position, takeProfit, stopLoss, id) {
+        this.id = id;
         this.openPrice = openPrice;
         this.amount = amount;
         this.share = amount / openPrice;
@@ -136,7 +163,8 @@ class position {
 }
 
 class order {
-    constructor(atPrice, amount, position, takeProfit, stopLoss) {
+    constructor(atPrice, amount, position, takeProfit, stopLoss, id) {
+        this.id = id
         this.atPrice = atPrice;
         this.amount = amount;
         this.date = new Date().toLocaleString();
@@ -146,14 +174,14 @@ class order {
     }
 }
 
-(async () => {
-  let firstBourse = new Burse(1000,'1m',1652004126,600,'ETH/USDT');
-  await firstBourse.init();
-  console.log(firstBourse);
-  let firstPrice = firstBourse.getCurrentPrice();
-  firstBourse.putOrder(300,100,'buy',302,299);
-  console.log(firstPrice);
-  console.log(firstBourse);
-  firstPrice = firstBourse.getCurrentPrice();
+// (async () => {
+//   let firstBourse = new Bourse(1000,'1m',1652004126,600,'ETH/USDT');
+//   await firstBourse.init();
+//   console.log(firstBourse);
+//   let firstPrice = firstBourse.getCurrentPrice();
+//   firstBourse.putOrder(300,100,'buy',302,299);
+//   console.log(firstPrice);
+//   console.log(firstBourse);
+//   firstPrice = firstBourse.getCurrentPrice();
 
-})();
+// })();
