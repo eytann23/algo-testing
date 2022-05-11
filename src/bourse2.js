@@ -87,8 +87,7 @@ class Bourse {
             const [timestamp, open, high, low, close, volume] = ticker;
             this.historyPrice.push({ timestamp, open, high, low, close, volume });
         }
-        this.currentPrice = this.historyPrice[0];
-        this.priceIndex += 1;
+        this.currentPrice = this.historyPrice[this.priceIndex];
     }
 
     getCurrentPrice() {
@@ -144,7 +143,9 @@ class Bourse {
     closeOrder(orderid) {
         for (let i = 0; i < this.orders.length; i++) {
             if (orderid === this.orders[i].id) {
-                this.balance += this.orders[i].amount;
+                if (this.orders[i].position === 'buy') {
+                    this.balance += this.orders[i].amount;
+                }
                 this.orders.splice(i, 1);
                 break;
             }
@@ -169,6 +170,7 @@ class Bourse {
         let toClosePosition = this.getPositionById(positionId);
         toClosePosition.stopLoss = atPrice;
         toClosePosition.takeProfit = atPrice;
+
     }
 
     isInPriceRange(price) {
@@ -195,40 +197,47 @@ class Bourse {
         }
     }
 
+    //add close all positions if price reach to 0.
     checkIfNeedToClosePosition() {
         let toClosePositionsArr = [];
         for (let currPosition of this.positions) {
-            if (this.isInPriceRange(currPosition.takeProfit)) {
-                currPosition.closedPrice = currPosition.takeProfit;
-                let multiplyFactor = currPosition.position === 'buy' ? 1 : -1
-                currPosition.value = multiplyFactor * ((currPosition.share * currPosition.closedPrice) - (currPosition.share * currPosition.openPrice));
-                this.balance += currPosition.value;
+            let { position, stopLoss, takeProfit, share, amount } = currPosition;
+            let multiplyFactor = position === 'buy' ? 1 : -1
+            if (this.checkIfNeedToCloseShortPositionOutOfBalance(currPosition)) {
+                continue;
+            } else if (this.isInPriceRange(takeProfit) || this.isInPriceRange(stopLoss)) {
+                currPosition.closedPrice = this.isInPriceRange(takeProfit) ? takeProfit : stopLoss;
+                currPosition.value = multiplyFactor * ((share * currPosition.closedPrice) - amount);
+                this.balance += position === 'buy' ? amount + currPosition.value : currPosition.value;
                 toClosePositionsArr.push(currPosition);
-            } else if (this.isInPriceRange(currPosition.stopLoss)) {
-                currPosition.closedPrice = currPosition.stopLoss;
-                let multiplyFactor = currPosition.position === 'buy' ? 1 : -1
-                currPosition.value = multiplyFactor * ((currPosition.share * currPosition.closedPrice) - (currPosition.share * currPosition.openPrice));
-                this.balance += currPosition.value;
-                toClosePositionsArr.push(currPosition);
-            }
-            // fix the short enter to minus positions
-            if (currPosition.position === 'sell') {
-                this.checkIfNeedToCloseShortPosition(currPosition);
             }
         }
         this.closePositions(toClosePositionsArr)
     }
 
-    checkIfNeedToCloseShortPosition(shortPosition) {
-        let positionValue = (shortPosition.share * this.currentPrice.high) - (shortPosition.share * shortPosition.openPrice);
-        if (this.balance - positionValue <= 0) {
-            console.log('in close short under 0');
-            zeroPrice = (balance + shortPosition.openPrice * shortPosition.share) / shortPosition.share
-            if (zeroPrice < this.currentPrice.low) {
-                shortPosition.value = (this.currentPrice.low * shortPosition.share)
+
+    checkIfNeedToCloseShortPositionOutOfBalance(currPosition) {
+        if (currPosition.position === 'sell') {
+            const { share, stopLoss, openPrice, amount } = currPosition;
+            let positionValue = (share * this.currentPrice.high) - (share * openPrice);
+            if ((this.balance - amount) - positionValue <= 0) {
+                let zeroPrice = ((this.balance - amount) / share) + openPrice;
+                if (zeroPrice > stopLoss) {
+                    currPosition.value = amount - (stopLoss * share);
+                    currPosition.closedPrice = stopLoss
+                } else if (zeroPrice > this.currentPrice.low) {
+                    currPosition.value = amount - (zeroPrice * share);
+                    currPosition.closedPrice = zeroPrice;
+                } else {
+                    currPosition.value = amount - (this.currentPrice.low * share);
+                    currPosition.closedPrice = this.currentPrice.low;
+                }
+                this.balance += currPosition.value;
+                this.closePositions([currPosition]);
+                return true;
             }
-            this.closePositions([shortPosition]);
         }
+        return false;
     }
 
     containObjectWithTheSameId(objectArr, object) {
@@ -247,7 +256,7 @@ class Bourse {
 }
 
 // [timestamp, open, high, low, close, volume]
-const fakeHistory = [[1, 2, 12, 9], [2, 2, 10, 8], [3, 2, 9, 6], [4, 2, 14, 10]]
+const fakeHistory = [[1, 2, 12, 9], [2, 8, 10, 8], [3, 8, 9, 6], [4, 9, 14, 10]]
 function initBurseForTest() {
     const firstBourse = new Bourse(1000, '1m', 1652004126, 600, 'ETH/USDT');
     firstBourse.init(fakeHistory);
@@ -256,11 +265,13 @@ function initBurseForTest() {
 
 
 
-// async function testBourseCreation() {
-//     console.log('TEST BOURSE CREATION');
-//     let firstBourse = initBurseForTest();
-//     console.log(firstBourse.historyPrice.length === 600);
-// }
+async function testBourseCreation() {
+    console.log('TEST BOURSE CREATION');
+    let firstBourse = new Bourse(1000, '1m', 1652004126, 600, 'ETH/USDT');
+    await firstBourse.init();
+    console.log(firstBourse.historyPrice);
+    console.log(firstBourse.historyPrice.length === 600);
+}
 
 async function testBourseWithTestHistory() {
     console.log('TEST BOURSE WITH TEST HISTORY');
@@ -272,7 +283,7 @@ async function testPutOrder() {
     console.log('TEST PUT ORDER');
     let firstBourse = initBurseForTest();
     firstBourse.putOrder(5, 3, 'buy', 6, 4);
-    firstBourse.putOrder(6, 3, 'buy', 7, 4);
+    firstBourse.putOrder(6, 3, 'sell', 7, 4);
     console.log(firstBourse.orders.length === 2);
 }
 
@@ -280,7 +291,7 @@ async function testOrdersArraySorted() {
     console.log('TEST ORDERS ARRAY SORTED');
     let firstBourse = initBurseForTest();
     firstBourse.putOrder(10, 3, 'buy', 6, 4);
-    firstBourse.putOrder(15, 3, 'buy', 7, 4);
+    firstBourse.putOrder(15, 3, 'sell', 7, 4);
     firstBourse.putOrder(12, 3, 'buy', 7, 4);
     console.log(firstBourse.orders.length === 3);
     console.log(firstBourse.orders[0].atPrice === 10);
@@ -314,6 +325,7 @@ async function testNotOpenPositionMoreThenBalance() {
     console.log('TEST NOT OPEN POSITION MORE THEN BALANCE');
     let firstBourse = initBurseForTest();
     firstBourse.putOrder(10, 1200, 'buy', 17, 4);
+    firstBourse.getCurrentPrice();
     console.log(firstBourse.positions.length === 0);
 }
 
@@ -362,7 +374,7 @@ function testCloseSellPosition() {
     let firstBourse = initBurseForTest();
     firstBourse.putOrder(11, 3, 'sell', 17, 4);
     let myOrder = firstBourse.putOrder(9, 18, 'sell', 19, 6);
-    firstBourse.putOrder(10, 3, 'buy', 15, 1);
+    firstBourse.putOrder(10.5, 3, 'buy', 15, 1);
     firstBourse.getCurrentPrice();
     console.log('positions length', firstBourse.positions.length === 3);
     console.log('orders length', firstBourse.orders.length === 0);
@@ -389,6 +401,7 @@ async function testTakeProfitForBuy() {
     console.log('TEST TAKE PROFIT FOR BUY');
     let firstBourse = initBurseForTest();
     let myorder = firstBourse.putOrder(10, 20, 'buy', 14, 4);
+    firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
@@ -432,6 +445,7 @@ async function testStopLossForSell() {
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
     firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
     console.log(firstBourse.orders.length === 0);
     console.log(firstBourse.positions.length === 0);
     console.log(firstBourse.closedPositions.length === 1);
@@ -439,22 +453,73 @@ async function testStopLossForSell() {
 }
 
 
+async function testCloseShortWhenEnterToMinusWithoutStopLoss() {
+    console.log('TEST CLOSE SHORT WHEN ENTER TO MINUS');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(9, 700, 'sell', 1, 20);
+    firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.orders.length === 0);
+    console.log(firstBourse.positions.length === 0);
+    console.log(firstBourse.closedPositions.length === 1);
+    console.log(firstBourse.closedPositions[0].value === -300);
+}
+
+async function testCloseShortWhenEnterToMinusWithStopLoss() {
+    console.log('TEST CLOSE SHORT WHEN ENTER TO MINUS');
+    let firstBourse = initBurseForTest();
+    let myorder = firstBourse.putOrder(9, 700, 'sell', 1, 12);
+    firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
+    firstBourse.getCurrentPrice();
+    console.log(firstBourse.orders.length === 0);
+    console.log(firstBourse.positions.length === 0);
+    console.log(firstBourse.closedPositions.length === 1);
+    console.log(firstBourse.closedPositions[0].value === 700 - (700 / 9 * 12));
+}
+
+async function realFuckingTest() {
+    let firstBourse = new Bourse(10000, '1m', 1652004126, 600, 'ETH/USDT');
+    await firstBourse.init();
+    for (let i = 0; i < 200; i++) {
+        let currPrice = firstBourse.getCurrentPrice();
+        if (currPrice.low <= 300) {
+            firstBourse.putOrder(300.5, 601, 'buy', 301, 299);
+
+        } else if (currPrice.high >= 301.5) {
+            firstBourse.putOrder(301.5, 601, 'sell', 300, 303);
+        }
+    }
+    firstBourse.closeAllOrders();
+    console.log('======ORDERS=====');
+    console.log(firstBourse.orders);
+    console.log('======POSITIONS=====')
+    console.log(firstBourse.positions);
+    console.log('======CLOSED-POSITIONS=====')
+    console.log(firstBourse.closedPositions);
+    console.log(firstBourse.balance);
+}
+
 
 // testBourseCreation();
-testBourseWithTestHistory();
-testPutOrder();
-testOpenPosition();
-testNotOpenPositionMoreThenBalance();
+// testBourseWithTestHistory();
+// testPutOrder();
+// testOpenPosition();
+// testNotOpenPositionMoreThenBalance();
 testCloseOrder();
 testCloseAllOrders();
-testOrdersArraySorted();
-testPositionsArraySorted();
-testCloseBuyPosition();
-testCloseSellPosition();
-testCoinShare();
-testTakeProfitForBuy();
-testStopLossForBuy();
-testStopLossForSell();
-testTakeProfitForSell();
-testStopLossForSell();
-
+// testOrdersArraySorted();
+// testPositionsArraySorted();
+// testCloseBuyPosition();
+// testCloseSellPosition();
+// testCoinShare();
+// testTakeProfitForBuy();
+// testStopLossForBuy();
+// testTakeProfitForSell();
+// testStopLossForSell();
+// testCloseShortWhenEnterToMinusWithoutStopLoss();
+// testCloseShortWhenEnterToMinusWithStopLoss();
+// realFuckingTest();
