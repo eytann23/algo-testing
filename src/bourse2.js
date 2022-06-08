@@ -90,6 +90,25 @@ class Bourse {
         this.currentPrice = this.historyPrice[this.priceIndex];
     }
 
+    getAllPositions() {
+        return this.positions;
+    }
+
+    getAllOrders() {
+        return this.orders;
+    }
+    getAllClosedPositions() {
+        return this.closedPositions;
+    }
+
+    getBalance() {
+        return this.balance;
+    }
+
+    getHistoyData() {
+        return this.historyPrice;
+    }
+
     getCurrentPrice() {
         this.checkEnteredIntoPosition();
         this.checkIfNeedToClosePosition();
@@ -487,6 +506,17 @@ async function testBalance() {
     console.log(firstBourse.closedPositions.length === 2);
 }
 
+//final test - 
+// buy/sell position and close it by hand
+// buy/sell position and close it by take profit
+// buy/sell position and close it by stop lose
+// cant buy/sell position over the balance
+// balance staies correctlly all the way
+// short closes when it goes beyond the balance
+// the value and close price of each position is valid
+// close spesific order
+// close all orders
+
 async function realFuckingTest() {
     let firstBourse = new Bourse(10000, '1m', 1652004126, 600, 'ETH/USDT');
     await firstBourse.init();
@@ -509,6 +539,9 @@ async function realFuckingTest() {
     console.log(firstBourse.balance);
 }
 
+// export { Bourse, createOrder, initBurseForTest };
+// export initBurseForTest;
+module.exports = { Bourse, createOrder, initBurseForTest };
 
 // testBourseCreation();
 // testBourseWithTestHistory();
